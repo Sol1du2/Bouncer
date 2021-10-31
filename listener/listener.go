@@ -10,6 +10,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"tinygo.org/x/bluetooth"
+
+	"github.com/sol1du2/bouncer/mqtt"
 )
 
 type device struct {
@@ -25,6 +27,8 @@ type Listener struct {
 
 	btAdapter *bluetooth.Adapter
 	devices   map[string]*device
+
+	mqttConn *mqtt.Client
 }
 
 // New constructs a listener from the provided parameters.
@@ -50,6 +54,16 @@ func New(c *Config) (*Listener, error) {
 		}
 	}
 
+	l.mqttConn = mqtt.NewClient(&mqtt.Config{
+		Logger: c.Logger,
+
+		ClientID:  c.MQTTClient,
+		Broker:    c.MQTTBroker,
+		User:      c.MQTTUser,
+		Password:  c.MQTTPassword,
+		BaseTopic: c.MQTTBaseTopic,
+	})
+
 	return l, nil
 }
 
@@ -67,6 +81,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 	readyCh := make(chan struct{}, 1)
 	triggerCh := make(chan bool, 1)
 
+	// Start listening.
 	go func() {
 		select {
 		case <-listenCtx.Done():
@@ -97,7 +112,18 @@ func (l *Listener) Listen(ctx context.Context) error {
 			if d, ok := l.devices[address]; ok {
 				logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
 				d.expiration = time.Now().Add(5 * time.Minute)
-				// TODO(sol1du2): Send MQTT message
+
+				// TODO(sol1du2): Implement persistency so we don't publish a
+				// message to the broker everytime.
+				// Connect to broker
+				if err := l.mqttConn.Connect(); err != nil {
+					logger.Errorln(err)
+				} else {
+					defer l.mqttConn.Disconnect()
+					if err := l.mqttConn.PublishHome(d.name); err != nil {
+						logger.Errorln(err)
+					}
+				}
 			}
 		})
 
@@ -111,7 +137,10 @@ func (l *Listener) Listen(ctx context.Context) error {
 			for _, value := range l.devices {
 				if time.Now().After(value.expiration) {
 					logger.Debugln(value.name, "left")
-					// TODO(sol1du2): Send MQTT message
+
+					if err := l.mqttConn.PublishAway(value.name); err != nil {
+						logger.Errorln(err)
+					}
 				}
 			}
 

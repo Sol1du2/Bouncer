@@ -15,6 +15,7 @@ var (
 	SystemdNotify bool
 
 	// Mqtt settings.
+	MQTTClient    string
 	MQTTBroker    string
 	MQTTUser      string
 	MQTTPassword  string
@@ -30,6 +31,7 @@ func SetDefaults(cmd *cobra.Command) {
 	viper.SetDefault("SYSTEMD_NOTIFY", false)
 	viper.SetDefault("CONFIG_FILE", "~/.bouncer.yaml")
 
+	viper.SetDefault("MQTT_CLIENT", "bouncer")
 	viper.SetDefault("MQTT_BROKER", "")
 	viper.SetDefault("MQTT_USER", "")
 	viper.SetDefault("MQTT_PASSWORD", "")
@@ -44,6 +46,7 @@ func SetDefaults(cmd *cobra.Command) {
 	cmd.Flags().String(
 		"config-file", "~/.bouncer.yaml", "Configuration file location. This is where a list of mac addresses should be included")
 
+	cmd.Flags().String("mqtt-client", "bouncer", "MQTT Client ID")
 	cmd.Flags().String("mqtt-broker", "", "MQTT Broker to connect to")
 	cmd.Flags().String("mqtt-user", "", "MQTT Username")
 	cmd.Flags().String("mqtt-password", "", "MQTT Password")
@@ -54,6 +57,7 @@ func SetDefaults(cmd *cobra.Command) {
 	_ = viper.BindPFlag("SYSTEMD_NOTIFY", cmd.Flags().Lookup("systemd-notify"))
 	_ = viper.BindPFlag("CONFIG_FILE", cmd.Flags().Lookup("config-file"))
 
+	_ = viper.BindPFlag("MQTT_CLIENT", cmd.Flags().Lookup("mqtt-client"))
 	_ = viper.BindPFlag("MQTT_BROKER", cmd.Flags().Lookup("mqtt-broker"))
 	_ = viper.BindPFlag("MQTT_USER", cmd.Flags().Lookup("mqtt-user"))
 	_ = viper.BindPFlag("MQTT_PASSWORD", cmd.Flags().Lookup("mqtt-password"))
@@ -78,6 +82,7 @@ func ApplyConfiguration(cmd *cobra.Command) error {
 	LogLevel = viper.GetString("LOG_LEVEL")
 	SystemdNotify = viper.GetBool("SYSTEMD_NOTIFY")
 
+	MQTTClient = viper.GetString("MQTT_CLIENT")
 	MQTTBroker = viper.GetString("MQTT_BROKER")
 	MQTTUser = viper.GetString("MQTT_USER")
 	MQTTPassword = viper.GetString("MQTT_PASSWORD")
