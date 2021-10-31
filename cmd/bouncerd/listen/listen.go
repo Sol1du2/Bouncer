@@ -1,12 +1,15 @@
 package listen
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	systemDaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/spf13/cobra"
 
 	"github.com/sol1du2/bouncer/cmd/bouncerd/common"
+	"github.com/sol1du2/bouncer/listener"
 )
 
 func CommandListen() *cobra.Command {
@@ -28,6 +31,8 @@ func CommandListen() *cobra.Command {
 }
 
 func listen(cmd *cobra.Command) error {
+	ctx := context.Background()
+
 	if err := common.ApplyConfiguration(cmd); err != nil {
 		return fmt.Errorf("failed to apply configuration: %w", err)
 	}
@@ -39,5 +44,26 @@ func listen(cmd *cobra.Command) error {
 
 	logger.Debugln("bouncer listening start")
 
-	return fmt.Errorf("not implemented")
+	cfg := &listener.Config{
+		Logger: logger,
+
+		OnReady: func(listener *listener.Listener) {
+			if common.SystemdNotify {
+				ok, notifyErr := systemDaemon.SdNotify(false, systemDaemon.SdNotifyReady)
+				logger.WithField("ok", ok).Debugln("called systemd sd_notify ready")
+				if notifyErr != nil {
+					logger.WithError(notifyErr).Errorln("failed to trigger systemd sd_notify")
+				}
+			}
+		},
+
+		MACAddresses: common.MACAddresses,
+	}
+
+	l, err := listener.New(cfg)
+	if err != nil {
+		return err
+	}
+
+	return l.Listen(ctx)
 }
