@@ -9,6 +9,9 @@
 !.chglog
 !.golangci.yaml
 
+# Config
+*.yaml
+
 # Build
 /build
 /dist

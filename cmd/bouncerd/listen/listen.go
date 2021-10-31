@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-)
 
-var defaultSystemdNotify = false
+	"github.com/sol1du2/bouncer/cmd/bouncerd/common"
+)
 
 func CommandListen() *cobra.Command {
 	listenCmd := &cobra.Command{
@@ -22,18 +22,17 @@ func CommandListen() *cobra.Command {
 		},
 	}
 
-	listenCmd.Flags().Bool("log-timestamp", true, "Prefix each log line with timestamp")
-	listenCmd.Flags().String("log-level", "info", "Log level (one of panic, fatal, error, warn, info or debug)")
-	listenCmd.Flags().BoolVar(&defaultSystemdNotify, "systemd-notify", defaultSystemdNotify, "Enable systemd sd_notify callback")
+	common.SetDefaults(listenCmd)
 
 	return listenCmd
 }
 
 func listen(cmd *cobra.Command) error {
-	logTimestamp, _ := cmd.Flags().GetBool("log-timestamp")
-	logLevel, _ := cmd.Flags().GetString("log-level")
+	if err := common.ApplyConfiguration(cmd); err != nil {
+		return fmt.Errorf("failed to apply configuration: %w", err)
+	}
 
-	logger, err := newLogger(!logTimestamp, logLevel)
+	logger, err := newLogger(!common.LogTimestamp, common.LogLevel)
 	if err != nil {
 		return fmt.Errorf("failed to create logger: %w", err)
 	}
