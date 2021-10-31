@@ -1,13 +1,16 @@
 package listen
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	systemDaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/spf13/cobra"
-)
 
-var defaultSystemdNotify = false
+	"github.com/sol1du2/bouncer/cmd/bouncerd/common"
+	"github.com/sol1du2/bouncer/listener"
+)
 
 func CommandListen() *cobra.Command {
 	listenCmd := &cobra.Command{
@@ -22,23 +25,45 @@ func CommandListen() *cobra.Command {
 		},
 	}
 
-	listenCmd.Flags().Bool("log-timestamp", true, "Prefix each log line with timestamp")
-	listenCmd.Flags().String("log-level", "info", "Log level (one of panic, fatal, error, warn, info or debug)")
-	listenCmd.Flags().BoolVar(&defaultSystemdNotify, "systemd-notify", defaultSystemdNotify, "Enable systemd sd_notify callback")
+	common.SetDefaults(listenCmd)
 
 	return listenCmd
 }
 
 func listen(cmd *cobra.Command) error {
-	logTimestamp, _ := cmd.Flags().GetBool("log-timestamp")
-	logLevel, _ := cmd.Flags().GetString("log-level")
+	ctx := context.Background()
 
-	logger, err := newLogger(!logTimestamp, logLevel)
+	if err := common.ApplyConfiguration(cmd); err != nil {
+		return fmt.Errorf("failed to apply configuration: %w", err)
+	}
+
+	logger, err := newLogger(!common.LogTimestamp, common.LogLevel)
 	if err != nil {
 		return fmt.Errorf("failed to create logger: %w", err)
 	}
 
 	logger.Debugln("bouncer listening start")
 
-	return fmt.Errorf("not implemented")
+	cfg := &listener.Config{
+		Logger: logger,
+
+		OnReady: func(listener *listener.Listener) {
+			if common.SystemdNotify {
+				ok, notifyErr := systemDaemon.SdNotify(false, systemDaemon.SdNotifyReady)
+				logger.WithField("ok", ok).Debugln("called systemd sd_notify ready")
+				if notifyErr != nil {
+					logger.WithError(notifyErr).Errorln("failed to trigger systemd sd_notify")
+				}
+			}
+		},
+
+		MACAddresses: common.MACAddresses,
+	}
+
+	l, err := listener.New(cfg)
+	if err != nil {
+		return err
+	}
+
+	return l.Listen(ctx)
 }
