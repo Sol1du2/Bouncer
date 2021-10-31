@@ -1,0 +1,24 @@
+# Normal rules (sorted alphabetically)
+#
+.*
+
+# We don't want to ignore the following even if they are dot-files
+!.editorconfig
+!.gitattributes
+!.gitignore
+!.chglog
+!.golangci.yaml
+
+# Build
+/build
+/dist
+/vendor
+/var
+
+# Misc
+*~
+
+# Go
+/golint.txt
+/govet.txt
+/bin
