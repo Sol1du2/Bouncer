@@ -17,6 +17,7 @@ import (
 type device struct {
 	name       string
 	expiration time.Time
+	isHome     bool
 }
 
 // Listener takes care of listening for bluetooth devices and tracking them.
@@ -51,6 +52,7 @@ func New(c *Config) (*Listener, error) {
 		l.devices[value] = &device{
 			name:       key,
 			expiration: time.Now(),
+			isHome:     false,
 		}
 	}
 
@@ -113,15 +115,19 @@ func (l *Listener) Listen(ctx context.Context) error {
 				logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
 				d.expiration = time.Now().Add(5 * time.Minute)
 
-				// TODO(sol1du2): Implement persistency so we don't publish a
-				// message to the broker everytime.
-				// Connect to broker
-				if err := l.mqttConn.Connect(); err != nil {
-					logger.Errorln(err)
-				} else {
-					defer l.mqttConn.Disconnect()
-					if err := l.mqttConn.PublishHome(d.name); err != nil {
+				// If we were already home don't bother sending the message
+				// again.
+				if !d.isHome {
+					// Connect to broker
+					if err := l.mqttConn.Connect(); err != nil {
 						logger.Errorln(err)
+					} else {
+						defer l.mqttConn.Disconnect()
+						if err := l.mqttConn.PublishHome(d.name); err != nil {
+							logger.Errorln(err)
+						} else {
+							d.isHome = true
+						}
 					}
 				}
 			}
@@ -134,12 +140,16 @@ func (l *Listener) Listen(ctx context.Context) error {
 
 		// Check every minute if any of the devices left
 		for {
-			for _, value := range l.devices {
-				if time.Now().After(value.expiration) {
-					logger.Debugln(value.name, "left")
+			for _, d := range l.devices {
+				// If we were not at home don't bother sending the message
+				// again.
+				if time.Now().After(d.expiration) && d.isHome {
+					logger.Debugln(d.name, "left")
 
-					if err := l.mqttConn.PublishAway(value.name); err != nil {
+					if err := l.mqttConn.PublishAway(d.name); err != nil {
 						logger.Errorln(err)
+					} else {
+						d.isHome = false
 					}
 				}
 			}
