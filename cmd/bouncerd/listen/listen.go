@@ -58,6 +58,12 @@ func listen(cmd *cobra.Command) error {
 		},
 
 		MACAddresses: common.MACAddresses,
+
+		MQTTClient:    common.MQTTClient,
+		MQTTBroker:    common.MQTTBroker,
+		MQTTUser:      common.MQTTUser,
+		MQTTPassword:  common.MQTTPassword,
+		MQTTBaseTopic: common.MQTTBaseTopic,
 	}
 
 	l, err := listener.New(cfg)
