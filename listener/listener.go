@@ -14,6 +14,12 @@ import (
 	"github.com/sol1du2/bouncer/mqtt"
 )
 
+// TODO(sol1du2): make this configurable.
+const (
+	home = "home"
+	away = "not_home"
+)
+
 type device struct {
 	name       string
 	expiration time.Time
@@ -103,12 +109,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 			return
 		}
 
-		// Reset expiration time.
-		for _, value := range l.devices {
-			value.expiration = time.Now().Add(5 * time.Minute)
-		}
-
-		// Start scanning.
+		// Start scanning, this blocks.
 		err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
 			address := btDevice.Address.String()
 			if d, ok := l.devices[address]; ok {
@@ -118,16 +119,11 @@ func (l *Listener) Listen(ctx context.Context) error {
 				// If we were already home don't bother sending the message
 				// again.
 				if !d.isHome {
-					// Connect to broker
-					if err := l.mqttConn.Connect(); err != nil {
-						logger.Errorln(err)
+					logger.Infoln(d.name, "has arrived")
+					if err := l.connectAndPublish(d.name, home); err != nil {
+						logger.WithError(err).Errorln("failed to send", home, "message")
 					} else {
-						defer l.mqttConn.Disconnect()
-						if err := l.mqttConn.PublishHome(d.name); err != nil {
-							logger.Errorln(err)
-						} else {
-							d.isHome = true
-						}
+						d.isHome = true
 					}
 				}
 			}
@@ -137,7 +133,10 @@ func (l *Listener) Listen(ctx context.Context) error {
 			errCh <- fmt.Errorf("failed to scan devices: %s", err)
 			return
 		}
+	}()
 
+	// Check if devices are no longer valid
+	go func() {
 		// Check every minute if any of the devices left
 		for {
 			for _, d := range l.devices {
@@ -145,9 +144,8 @@ func (l *Listener) Listen(ctx context.Context) error {
 				// again.
 				if time.Now().After(d.expiration) && d.isHome {
 					logger.Debugln(d.name, "left")
-
-					if err := l.mqttConn.PublishAway(d.name); err != nil {
-						logger.Errorln(err)
+					if err := l.connectAndPublish(d.name, away); err != nil {
+						logger.WithError(err).Errorln("failed to send", home, "message")
 					} else {
 						d.isHome = false
 					}
@@ -211,4 +209,14 @@ func (l *Listener) Listen(ctx context.Context) error {
 	}()
 
 	return err
+}
+
+// connectAndPublish connects to the MQTT broker, publishes a message and
+// disconnects.
+func (l *Listener) connectAndPublish(deviceName, message string) error {
+	if err := l.mqttConn.Connect(); err != nil {
+		return err
+	}
+	defer l.mqttConn.Disconnect()
+	return l.mqttConn.PublishMessage(deviceName, message)
 }
