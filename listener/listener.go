@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,7 @@ type Listener struct {
 
 	btAdapter *bluetooth.Adapter
 	devices   map[string]*device
+	dMutex    sync.RWMutex
 
 	mqttConn *mqtt.Client
 }
@@ -112,20 +114,30 @@ func (l *Listener) Listen(ctx context.Context) error {
 		// Start scanning, this blocks.
 		err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
 			address := btDevice.Address.String()
+			l.dMutex.RLock()
 			if d, ok := l.devices[address]; ok {
+				// We found the device and need to edit it, acquire a write
+				// lock.
+				l.dMutex.RUnlock()
+				l.dMutex.Lock()
+				defer l.dMutex.Unlock()
+
 				logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
 				d.expiration = time.Now().Add(5 * time.Minute)
 
 				// If we were already home don't bother sending the message
 				// again.
 				if !d.isHome {
-					logger.Infoln(d.name, "has arrived")
+					logger.Debugln(d.name, "has arrived")
 					if err := l.connectAndPublish(d.name, home); err != nil {
 						logger.WithError(err).Errorln("failed to send", home, "message")
 					} else {
 						d.isHome = true
 					}
 				}
+			} else {
+				// Only read unlock if the condition was NOT true.
+				l.dMutex.RUnlock()
 			}
 		})
 
@@ -139,19 +151,32 @@ func (l *Listener) Listen(ctx context.Context) error {
 	go func() {
 		// Check every minute if any of the devices left
 		for {
+			l.dMutex.RLock()
 			for _, d := range l.devices {
-				// If we were not at home don't bother sending the message
-				// again.
-				if time.Now().After(d.expiration) && d.isHome {
-					logger.Debugln(d.name, "left")
-					if err := l.connectAndPublish(d.name, away); err != nil {
-						logger.WithError(err).Errorln("failed to send", home, "message")
-					} else {
-						d.isHome = false
-					}
+				// If the time hasn't expired yet, or we are already away,
+				// don't bother sending messages.
+				if !time.Now().After(d.expiration) || !d.isHome {
+					continue
 				}
+
+				// Time has expired and the device is still set as home,
+				// swap lock for a write lock.
+				l.dMutex.RUnlock()
+				l.dMutex.Lock()
+
+				logger.Debugln(d.name, "left")
+				if err := l.connectAndPublish(d.name, away); err != nil {
+					logger.WithError(err).Errorln("failed to send", home, "message")
+				} else {
+					d.isHome = false
+				}
+
+				// Don't forget to swap the lock to a read lock again.
+				l.dMutex.Unlock()
+				l.dMutex.RLock()
 			}
 
+			l.dMutex.RUnlock()
 			time.Sleep(time.Minute)
 		}
 	}()
