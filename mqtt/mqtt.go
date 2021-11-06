@@ -57,27 +57,12 @@ func (c *Client) Disconnect() {
 	}
 }
 
-func (c *Client) PublishHome(deviceName string) error {
+func (c *Client) PublishMessage(deviceName, message string) error {
 	if c.client == nil {
 		return fmt.Errorf("client not initialized")
 	}
 
-	token := c.client.Publish(c.config.BaseTopic+"/"+deviceName, 0, false, "home")
-	_ = token.Wait()
-
-	if err := token.Error(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) PublishAway(deviceName string) error {
-	if c.client == nil {
-		return fmt.Errorf("client not initialized")
-	}
-
-	token := c.client.Publish(c.config.BaseTopic+"/"+deviceName, 0, false, "not_home")
+	token := c.client.Publish(c.config.BaseTopic+"/"+deviceName, 0, false, message)
 	_ = token.Wait()
 
 	if err := token.Error(); err != nil {
