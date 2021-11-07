@@ -64,6 +64,8 @@ func listen(cmd *cobra.Command) error {
 		MQTTUser:      common.MQTTUser,
 		MQTTPassword:  common.MQTTPassword,
 		MQTTBaseTopic: common.MQTTBaseTopic,
+
+		DeviceExpiration: common.DeviceExpiration,
 	}
 
 	l, err := listener.New(cfg)

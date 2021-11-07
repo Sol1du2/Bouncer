@@ -123,7 +123,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 				defer l.dMutex.Unlock()
 
 				logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
-				d.expiration = time.Now().Add(5 * time.Minute)
+				d.expiration = time.Now().Add(l.config.DeviceExpiration)
 
 				// If we were already home don't bother sending the message
 				// again.
@@ -149,7 +149,6 @@ func (l *Listener) Listen(ctx context.Context) error {
 
 	// Check if devices are no longer valid
 	go func() {
-		// Check every minute if any of the devices left
 		for {
 			l.dMutex.RLock()
 			for _, d := range l.devices {
@@ -177,7 +176,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 			}
 
 			l.dMutex.RUnlock()
-			time.Sleep(time.Minute)
+			time.Sleep(5 * time.Second)
 		}
 	}()
 

@@ -3,6 +3,7 @@ package common
 import (
 	"errors"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,7 +22,8 @@ var (
 	MQTTPassword  string
 	MQTTBaseTopic string
 
-	MACAddresses = map[string]string{}
+	MACAddresses     map[string]string
+	DeviceExpiration time.Duration
 )
 
 func SetDefaults(cmd *cobra.Command) {
@@ -38,6 +40,7 @@ func SetDefaults(cmd *cobra.Command) {
 	viper.SetDefault("MQTT_BASE_TOPIC", "bouncer/presence")
 
 	viper.SetDefault("MAC_ADDRESSES", map[string]string{})
+	viper.SetDefault("DEVICE_EXPIRATION", 60)
 
 	// Command line flags
 	cmd.Flags().Bool("log-timestamp", true, "Prefix each log line with timestamp")
@@ -52,6 +55,8 @@ func SetDefaults(cmd *cobra.Command) {
 	cmd.Flags().String("mqtt-password", "", "MQTT Password")
 	cmd.Flags().String("mqtt-base-topic", "bouncer/presence", "MQTT Base topic. Device name in mac address list will be appended to the topic")
 
+	cmd.Flags().Uint("device-expiration", 60, "the time, in seconds, for a device to be considered away")
+
 	_ = viper.BindPFlag("LOG_TIMESTAMP", cmd.Flags().Lookup("log-timestamp"))
 	_ = viper.BindPFlag("LOG_LEVEL", cmd.Flags().Lookup("log-level"))
 	_ = viper.BindPFlag("SYSTEMD_NOTIFY", cmd.Flags().Lookup("systemd-notify"))
@@ -62,6 +67,8 @@ func SetDefaults(cmd *cobra.Command) {
 	_ = viper.BindPFlag("MQTT_USER", cmd.Flags().Lookup("mqtt-user"))
 	_ = viper.BindPFlag("MQTT_PASSWORD", cmd.Flags().Lookup("mqtt-password"))
 	_ = viper.BindPFlag("MQTT_BASE_TOPIC", cmd.Flags().Lookup("mqtt-base-topic"))
+
+	_ = viper.BindPFlag("DEVICE_EXPIRATION", cmd.Flags().Lookup("device-expiration"))
 
 	// Setup env
 	viper.SetEnvPrefix("bouncer")
@@ -89,6 +96,8 @@ func ApplyConfiguration(cmd *cobra.Command) error {
 	MQTTBaseTopic = viper.GetString("MQTT_BASE_TOPIC")
 
 	MACAddresses = viper.GetStringMapString("MAC_ADDRESSES")
+
+	DeviceExpiration = time.Second * time.Duration(viper.GetUint("DEVICE_EXPIRATION"))
 
 	return nil
 }
