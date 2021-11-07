@@ -34,13 +34,13 @@ And add the following to the bluetooth group:
 
 ```bash
 <policy group="bluetooth">
-    <allow send_destination="org.bluez"/>
+	<allow send_destination="org.bluez"/>
     <allow send_interface="org.bluez.Agent1"/>
     <allow send_interface="org.bluez.GattCharacteristic1"/>
     <allow send_interface="org.bluez.GattDescriptor1"/>
     <allow send_interface="org.freedesktop.DBus.ObjectManager"/>
     <allow send_interface="org.freedesktop.DBus.Properties"/>
-  </policy>
+</policy>
 ```
 
 ## Build
@@ -83,6 +83,7 @@ All flags are also available via the following envs:
 | `BOUNCER_MQTT_USER`       | ""                 | The MQTT user to authenticate with the broker.          |
 | `BOUNCER_MQTT_PASSWORD`   | ""                 | The user's password for authentication.          |
 | `BOUNCER_MQTT_BASE_TOPIC` | bouncer/presence | The base topic when publishing the presence of a device. The device name will be appended to this topic. E.g. If a device is named `tile_solidus`, the topic will be `bouncer/presence/tile_solidus` :)          |
+| `BOUNCER_DEVICE_EXPIRATION` | 60 seconds | The amount of time (in seconds) without detecting a device for it to be considered away          |
 
 ### MAC Address List
 
