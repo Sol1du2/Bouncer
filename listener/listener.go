@@ -91,15 +91,18 @@ func (l *Listener) Listen(ctx context.Context) error {
 	readyCh := make(chan struct{}, 1)
 	triggerCh := make(chan bool, 1)
 
-	// Start listening.
+	var wg sync.WaitGroup
+
+	// Start listening for BT devices.
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		select {
 		case <-listenCtx.Done():
 			return
 		case <-readyCh:
 		}
-
-		logger.Infoln("beacon listener ready")
 
 		if l.config.OnReady != nil {
 			l.config.OnReady(l)
@@ -111,6 +114,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 			return
 		}
 
+		logger.Infoln("beacon listener started")
 		// Start scanning, this blocks.
 		err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
 			address := btDevice.Address.String()
@@ -148,7 +152,11 @@ func (l *Listener) Listen(ctx context.Context) error {
 	}()
 
 	// Check if devices are no longer valid
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
+		logger.Infoln("beacon presence check started")
 		for {
 			l.dMutex.RLock()
 			for _, d := range l.devices {
@@ -176,13 +184,25 @@ func (l *Listener) Listen(ctx context.Context) error {
 			}
 
 			l.dMutex.RUnlock()
-			time.Sleep(5 * time.Second)
+
+			select {
+			case <-listenCtx.Done():
+				logger.Infoln("beacon presence check stopped")
+				return
+			case <-time.After(5 * time.Second):
+			}
 		}
 	}()
 
 	// TODO(sol1du2): implement proper ready.
 	go func() {
 		close(readyCh)
+	}()
+
+	// Wait for all services to stop before closing the exit channel
+	go func() {
+		wg.Wait()
+		close(exitCh)
 	}()
 
 	// Wait for exit or error, with support for HUP to reload
@@ -207,9 +227,13 @@ func (l *Listener) Listen(ctx context.Context) error {
 		}
 	}()
 
-	// Shutdown, listener will stop to accept new connections.
 	logger.Infoln("clean shutdown start")
-	close(exitCh)
+
+	// Stop Scanner.
+	if stopErr := l.btAdapter.StopScan(); stopErr != nil {
+		logger.Debugln(stopErr)
+	}
+	logger.Infoln("beacon listener stopped")
 
 	// Cancel our own context.
 	listenCtxCancel()
