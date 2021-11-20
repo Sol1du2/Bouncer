@@ -97,57 +97,14 @@ func (l *Listener) Listen(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
 		select {
 		case <-listenCtx.Done():
 			return
 		case <-readyCh:
 		}
 
-		if l.config.OnReady != nil {
-			l.config.OnReady(l)
-		}
-
-		// Enable BLE interface.
-		if err := l.btAdapter.Enable(); err != nil {
-			errCh <- fmt.Errorf("failed to enable BLE stack: %s", err)
-			return
-		}
-
-		logger.Infoln("beacon listener started")
-		// Start scanning, this blocks.
-		err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
-			address := btDevice.Address.String()
-			l.dMutex.RLock()
-			if d, ok := l.devices[address]; ok {
-				// We found the device and need to edit it, acquire a write
-				// lock.
-				l.dMutex.RUnlock()
-				l.dMutex.Lock()
-				defer l.dMutex.Unlock()
-
-				logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
-				d.expiration = time.Now().Add(l.config.DeviceExpiration)
-
-				// If we were already home don't bother sending the message
-				// again.
-				if !d.isHome {
-					logger.Debugln(d.name, "has arrived")
-					if err := l.connectAndPublish(d.name, home); err != nil {
-						logger.WithError(err).Errorln("failed to send", home, "message")
-					} else {
-						d.isHome = true
-					}
-				}
-			} else {
-				// Only read unlock if the condition was NOT true.
-				l.dMutex.RUnlock()
-			}
-		})
-
-		if err != nil {
-			errCh <- fmt.Errorf("failed to scan devices: %s", err)
-			return
+		if err := l.scanBeacons(); err != nil {
+			errCh <- err
 		}
 	}()
 
@@ -155,43 +112,7 @@ func (l *Listener) Listen(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		logger.Infoln("beacon presence check started")
-		for {
-			l.dMutex.RLock()
-			for _, d := range l.devices {
-				// If the time hasn't expired yet, or we are already away,
-				// don't bother sending messages.
-				if !time.Now().After(d.expiration) || !d.isHome {
-					continue
-				}
-
-				// Time has expired and the device is still set as home,
-				// swap lock for a write lock.
-				l.dMutex.RUnlock()
-				l.dMutex.Lock()
-
-				logger.Debugln(d.name, "left")
-				if err := l.connectAndPublish(d.name, away); err != nil {
-					logger.WithError(err).Errorln("failed to send", home, "message")
-				} else {
-					d.isHome = false
-				}
-
-				// Don't forget to swap the lock to a read lock again.
-				l.dMutex.Unlock()
-				l.dMutex.RLock()
-			}
-
-			l.dMutex.RUnlock()
-
-			select {
-			case <-listenCtx.Done():
-				logger.Infoln("beacon presence check stopped")
-				return
-			case <-time.After(5 * time.Second):
-			}
-		}
+		l.checkBeaconPresence(listenCtx)
 	}()
 
 	// TODO(sol1du2): implement proper ready.
@@ -233,10 +154,10 @@ func (l *Listener) Listen(ctx context.Context) error {
 	if stopErr := l.btAdapter.StopScan(); stopErr != nil {
 		logger.Debugln(stopErr)
 	}
-	logger.Infoln("beacon listener stopped")
-
-	// Cancel our own context.
+	// Cancel our own context and stop context sensitive services.
 	listenCtxCancel()
+
+	// Wait for the exitCh to be closed indicating all services have exited.
 	func() {
 		for {
 			select {
@@ -257,6 +178,98 @@ func (l *Listener) Listen(ctx context.Context) error {
 	}()
 
 	return err
+}
+
+func (l *Listener) scanBeacons() error {
+	logger := l.logger
+
+	if l.config.OnReady != nil {
+		l.config.OnReady(l)
+	}
+
+	// Enable BLE interface.
+	if err := l.btAdapter.Enable(); err != nil {
+		return fmt.Errorf("failed to enable BLE stack: %s", err)
+	}
+
+	logger.Infoln("beacon listener started")
+	// Start scanning, this blocks.
+	err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
+		address := btDevice.Address.String()
+		l.dMutex.RLock()
+		if d, ok := l.devices[address]; ok {
+			// We found the device and need to edit it, acquire a write
+			// lock.
+			l.dMutex.RUnlock()
+			l.dMutex.Lock()
+			defer l.dMutex.Unlock()
+
+			logger.Debugln("found", d.name, address, btDevice.RSSI, btDevice.LocalName())
+			d.expiration = time.Now().Add(l.config.DeviceExpiration)
+
+			// If we were already home don't bother sending the message
+			// again.
+			if !d.isHome {
+				logger.Debugln(d.name, "has arrived")
+				if err := l.connectAndPublish(d.name, home); err != nil {
+					logger.WithError(err).Errorln("failed to send", home, "message")
+				} else {
+					d.isHome = true
+				}
+			}
+		} else {
+			// Only read unlock if the condition was NOT true.
+			l.dMutex.RUnlock()
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to scan devices: %s", err)
+	}
+
+	logger.Infoln("beacon listener stopped")
+	return nil
+}
+
+func (l *Listener) checkBeaconPresence(ctx context.Context) {
+	logger := l.logger
+
+	logger.Infoln("beacon presence check started")
+	for {
+		l.dMutex.RLock()
+		for _, d := range l.devices {
+			// If the time hasn't expired yet, or we are already away,
+			// don't bother sending messages.
+			if !time.Now().After(d.expiration) || !d.isHome {
+				continue
+			}
+
+			// Time has expired and the device is still set as home,
+			// swap lock for a write lock.
+			l.dMutex.RUnlock()
+			l.dMutex.Lock()
+
+			logger.Debugln(d.name, "left")
+			if err := l.connectAndPublish(d.name, away); err != nil {
+				logger.WithError(err).Errorln("failed to send", home, "message")
+			} else {
+				d.isHome = false
+			}
+
+			// Don't forget to swap the lock to a read lock again.
+			l.dMutex.Unlock()
+			l.dMutex.RLock()
+		}
+
+		l.dMutex.RUnlock()
+
+		select {
+		case <-ctx.Done():
+			logger.Infoln("beacon presence check stopped")
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
 }
 
 // connectAndPublish connects to the MQTT broker, publishes a message and
