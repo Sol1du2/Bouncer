@@ -54,26 +54,6 @@ func New(c *Config) (*Listener, error) {
 		devices:   make(map[string]*device),
 	}
 
-	for key, value := range c.MACAddresses {
-		l.logger.Debugln("Tracking", value, "as", key)
-		// Set the value as the key so that we can easily lookup by address.
-		l.devices[value] = &device{
-			name:       key,
-			expiration: time.Now(),
-			isHome:     false,
-		}
-	}
-
-	l.mqttConn = mqtt.NewClient(&mqtt.Config{
-		Logger: c.Logger,
-
-		ClientID:  c.MQTTClient,
-		Broker:    c.MQTTBroker,
-		User:      c.MQTTUser,
-		Password:  c.MQTTPassword,
-		BaseTopic: c.MQTTBaseTopic,
-	})
-
 	return l, nil
 }
 
@@ -108,20 +88,27 @@ func (l *Listener) Listen(ctx context.Context) error {
 		}
 	}()
 
-	// Check if devices are no longer valid
+	// Check if devices are no longer valid.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		select {
+		case <-listenCtx.Done():
+			return
+		case <-readyCh:
+		}
+
 		l.checkBeaconPresence(listenCtx)
 	}()
 
-	// TODO(sol1du2): implement proper ready.
+	// Setup and then wait until services close before closing the exit channel.
 	go func() {
-		close(readyCh)
-	}()
+		if err := l.setup(); err != nil {
+			errCh <- err
+		} else {
+			close(readyCh)
+		}
 
-	// Wait for all services to stop before closing the exit channel
-	go func() {
 		wg.Wait()
 		close(exitCh)
 	}()
@@ -180,19 +167,56 @@ func (l *Listener) Listen(ctx context.Context) error {
 	return err
 }
 
-func (l *Listener) scanBeacons() error {
-	logger := l.logger
+// setup Initializes the BT adapter as well as the MQTT client and the devices
+// map.
+// If set, calls the OnReady function when done.
+func (l *Listener) setup() error {
+	c := l.config
 
-	if l.config.OnReady != nil {
-		l.config.OnReady(l)
+	// Initiate devices map.
+	for key, value := range c.MACAddresses {
+		l.logger.Debugln("Tracking", value, "as", key)
+		// Set the value as the key so that we can easily lookup by address.
+		l.devices[value] = &device{
+			name:       key,
+			expiration: time.Now(),
+			isHome:     false,
+		}
 	}
+
+	// Initiate MQTT client.
+	l.mqttConn = mqtt.NewClient(&mqtt.Config{
+		Logger: c.Logger,
+
+		ClientID:  c.MQTTClient,
+		Broker:    c.MQTTBroker,
+		User:      c.MQTTUser,
+		Password:  c.MQTTPassword,
+		BaseTopic: c.MQTTBaseTopic,
+	})
 
 	// Enable BLE interface.
 	if err := l.btAdapter.Enable(); err != nil {
 		return fmt.Errorf("failed to enable BLE stack: %s", err)
 	}
 
-	logger.Infoln("beacon listener started")
+	// Notify ready.
+	if l.config.OnReady != nil {
+		l.config.OnReady(l)
+	}
+
+	return nil
+}
+
+// scanBeacons Starts scanning for the beacons in the devices map.
+// If a device that was previously marked as away is found, an MQTT home message
+// is sent. If the device was already marked as home, no new messages are sent.
+//
+// Blocks forever until the bt adaptor's StopScan function is called.
+func (l *Listener) scanBeacons() error {
+	logger := l.logger
+
+	logger.Infoln("beacon scan started")
 	// Start scanning, this blocks.
 	err := l.btAdapter.Scan(func(adapter *bluetooth.Adapter, btDevice bluetooth.ScanResult) {
 		address := btDevice.Address.String()
@@ -227,14 +251,21 @@ func (l *Listener) scanBeacons() error {
 		return fmt.Errorf("failed to scan devices: %s", err)
 	}
 
-	logger.Infoln("beacon listener stopped")
+	logger.Infoln("beacon scan stopped")
 	return nil
 }
 
+// checkBeaconPresence checks if any of the beacon devices has been away for
+// longer than the set expiration time. The check, for all devices, is performed
+// every 5 seconds.
+// If the device was previously marked as being at home an MQTT away message is
+// sent. If the device was already marked as away, no new messages are sent.
+//
+// Blocks forever until the ctx is canceled.
 func (l *Listener) checkBeaconPresence(ctx context.Context) {
 	logger := l.logger
 
-	logger.Infoln("beacon presence check started")
+	logger.Infoln("beacon presence check start")
 	for {
 		l.dMutex.RLock()
 		for _, d := range l.devices {
