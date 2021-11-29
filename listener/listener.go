@@ -188,11 +188,12 @@ func (l *Listener) setup() error {
 	l.mqttConn = mqtt.NewClient(&mqtt.Config{
 		Logger: c.Logger,
 
-		ClientID:  c.MQTTClient,
-		Broker:    c.MQTTBroker,
-		User:      c.MQTTUser,
-		Password:  c.MQTTPassword,
-		BaseTopic: c.MQTTBaseTopic,
+		ClientID:           c.MQTTClient,
+		Broker:             c.MQTTBroker,
+		User:               c.MQTTUser,
+		Password:           c.MQTTPassword,
+		PublishBaseTopic:   c.MQTTPublishBaseTopic,
+		SubscribeBaseTopic: c.MQTTSubscribeBaseTopic,
 	})
 
 	// Enable BLE interface.

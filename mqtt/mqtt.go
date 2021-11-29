@@ -62,7 +62,7 @@ func (c *Client) PublishMessage(deviceName, message string) error {
 		return fmt.Errorf("client not initialized")
 	}
 
-	token := c.client.Publish(c.config.BaseTopic+"/"+deviceName, 0, false, message)
+	token := c.client.Publish(c.config.PublishBaseTopic+"/"+deviceName, 0, false, message)
 	_ = token.Wait()
 
 	if err := token.Error(); err != nil {

@@ -16,11 +16,12 @@ var (
 	SystemdNotify bool
 
 	// Mqtt settings.
-	MQTTClient    string
-	MQTTBroker    string
-	MQTTUser      string
-	MQTTPassword  string
-	MQTTBaseTopic string
+	MQTTClient             string
+	MQTTBroker             string
+	MQTTUser               string
+	MQTTPassword           string
+	MQTTPublishBaseTopic   string
+	MQTTSubscribeBaseTopic string
 
 	MACAddresses     map[string]string
 	DeviceExpiration time.Duration
@@ -37,7 +38,8 @@ func SetDefaults(cmd *cobra.Command) {
 	viper.SetDefault("MQTT_BROKER", "")
 	viper.SetDefault("MQTT_USER", "")
 	viper.SetDefault("MQTT_PASSWORD", "")
-	viper.SetDefault("MQTT_BASE_TOPIC", "bouncer/presence")
+	viper.SetDefault("MQTT_PUBLISH_BASE_TOPIC", "bouncer/presence")
+	viper.SetDefault("MQTT_SUBSCRIBE_BASE_TOPIC", "bouncer/request")
 
 	viper.SetDefault("MAC_ADDRESSES", map[string]string{})
 	viper.SetDefault("DEVICE_EXPIRATION", 60)
@@ -66,7 +68,8 @@ func SetDefaults(cmd *cobra.Command) {
 	_ = viper.BindPFlag("MQTT_BROKER", cmd.Flags().Lookup("mqtt-broker"))
 	_ = viper.BindPFlag("MQTT_USER", cmd.Flags().Lookup("mqtt-user"))
 	_ = viper.BindPFlag("MQTT_PASSWORD", cmd.Flags().Lookup("mqtt-password"))
-	_ = viper.BindPFlag("MQTT_BASE_TOPIC", cmd.Flags().Lookup("mqtt-base-topic"))
+	_ = viper.BindPFlag("MQTT_PUBLISH_BASE_TOPIC", cmd.Flags().Lookup("mqtt-publish-base-topic"))
+	_ = viper.BindPFlag("MQTT_SUBSCRIBE_BASE_TOPIC", cmd.Flags().Lookup("mqtt-subscribe-base-topic"))
 
 	_ = viper.BindPFlag("DEVICE_EXPIRATION", cmd.Flags().Lookup("device-expiration"))
 
@@ -93,7 +96,8 @@ func ApplyConfiguration(cmd *cobra.Command) error {
 	MQTTBroker = viper.GetString("MQTT_BROKER")
 	MQTTUser = viper.GetString("MQTT_USER")
 	MQTTPassword = viper.GetString("MQTT_PASSWORD")
-	MQTTBaseTopic = viper.GetString("MQTT_BASE_TOPIC")
+	MQTTPublishBaseTopic = viper.GetString("MQTT_PUBLISH_BASE_TOPIC")
+	MQTTSubscribeBaseTopic = viper.GetString("MQTT_SUBSCRIBE_BASE_TOPIC")
 
 	MACAddresses = viper.GetStringMapString("MAC_ADDRESSES")
 
