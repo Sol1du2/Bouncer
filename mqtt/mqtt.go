@@ -51,6 +51,21 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+func (c *Client) Subscribe(topic string, handler pahomqtt.MessageHandler) error {
+	if c.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+
+	token := c.client.Subscribe(c.config.SubscribeBaseTopic+"/"+topic, 0, handler)
+	_ = token.Wait()
+
+	if err := token.Error(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) Disconnect() {
 	if c.client != nil {
 		c.client.Disconnect(waitBeforeDisconnect)
@@ -62,7 +77,7 @@ func (c *Client) PublishMessage(deviceName, message string) error {
 		return fmt.Errorf("client not initialized")
 	}
 
-	token := c.client.Publish(c.config.BaseTopic+"/"+deviceName, 0, false, message)
+	token := c.client.Publish(c.config.PublishBaseTopic+"/"+deviceName, 0, false, message)
 	_ = token.Wait()
 
 	if err := token.Error(); err != nil {

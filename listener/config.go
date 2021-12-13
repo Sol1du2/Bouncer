@@ -13,11 +13,12 @@ type Config struct {
 	MACAddresses     map[string]string
 	DeviceExpiration time.Duration
 
-	MQTTClient    string
-	MQTTBroker    string
-	MQTTUser      string
-	MQTTPassword  string
-	MQTTBaseTopic string
+	MQTTClient             string
+	MQTTBroker             string
+	MQTTUser               string
+	MQTTPassword           string
+	MQTTPublishBaseTopic   string
+	MQTTSubscribeBaseTopic string
 
 	OnReady func(*Listener)
 }

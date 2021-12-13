@@ -13,5 +13,6 @@ type Config struct {
 	User     string
 	Password string
 
-	BaseTopic string
+	PublishBaseTopic   string
+	SubscribeBaseTopic string
 }

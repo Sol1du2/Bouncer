@@ -59,11 +59,12 @@ func listen(cmd *cobra.Command) error {
 
 		MACAddresses: common.MACAddresses,
 
-		MQTTClient:    common.MQTTClient,
-		MQTTBroker:    common.MQTTBroker,
-		MQTTUser:      common.MQTTUser,
-		MQTTPassword:  common.MQTTPassword,
-		MQTTBaseTopic: common.MQTTBaseTopic,
+		MQTTClient:             common.MQTTClient,
+		MQTTBroker:             common.MQTTBroker,
+		MQTTUser:               common.MQTTUser,
+		MQTTPassword:           common.MQTTPassword,
+		MQTTPublishBaseTopic:   common.MQTTPublishBaseTopic,
+		MQTTSubscribeBaseTopic: common.MQTTSubscribeBaseTopic,
 
 		DeviceExpiration: common.DeviceExpiration,
 	}
