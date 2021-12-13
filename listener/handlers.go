@@ -4,9 +4,9 @@ import (
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-// handleStatusRequest publishes the status of all devices being tracked.
-func (l *Listener) handleStatusRequest(_ pahomqtt.Client, _ pahomqtt.Message) {
-	l.logger.Debugln("received status request")
+// handlePresenceRequest publishes the presence status of all devices being tracked.
+func (l *Listener) handlePresenceRequest(_ pahomqtt.Client, _ pahomqtt.Message) {
+	l.logger.Debugln("received presence request")
 
 	l.dMutex.RLock()
 	defer l.dMutex.RUnlock()

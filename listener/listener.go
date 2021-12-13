@@ -211,7 +211,7 @@ func (l *Listener) setup() error {
 	}
 
 	// Add new subscriptions here, as needed.
-	if err := l.mqttConn.Subscribe(presenceTopic, l.handleStatusRequest); err != nil {
+	if err := l.mqttConn.Subscribe(presenceTopic, l.handlePresenceRequest); err != nil {
 		return fmt.Errorf("failed to subscribe to %s topic: %s", presenceTopic, err)
 	}
 
