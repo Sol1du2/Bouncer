@@ -53,7 +53,70 @@ To start Bouncer run the following command:
 ./bin/bouncerd listen [flags]
 ```
 
-## Configuration
+## MQTT message layout
+
+At the moment all MQTT messages are sent as a simple string without any json payload.
+
+Bouncer supports 2 base topics, which are configurable.
+- **The publish base topic** is used to publish a message indicating a change in the device's presence. This message is a string which can be either `home`, if the device was detected, or `not_home` if the device was not detected after the set timeout expired. Please note that this message is only published if the device presence status **changes**. Meaning, if the device was already home (or already away), no new messages are published. This helps avoid spamming the MQTT broker. For the time being these strings can not be configured. The topic format is `PUBLISH_BASE_TOPIC/DEVICE_NAME`. For example, using the default base topic and the device name `tile_alice`, when the device is detected at home a message `home` will be sent to `bouncer/presence/tile_alice`
+
+- **The subscribe base topic** is used to listen to requests. For the time being the only available request is to ask for the current presence status of all devices. The topic format is `SUBSCRIBE_BASE_TOPIC/presence`. When a message is published to this topic (no payload necessary), Bouncer will send a message to the `PUBLISH_BASE_TOPIC/DEVICE` for every device it's tracking.
+
+## Home Assistant Configuration
+
+As mentioned above this service was designed to be used with [Home Assistant](https://www.home-assistant.io/). The messages were chosen to be as compatible with it as possible so we get minimal configuration. For more information on how Home Assistant works please consult their docs. Here I will only explain the necessary configuration to listen to the messages from Bouncer.
+
+Essentially all you need to do is add an MQTT device tracker to your configuration file. Here is an example:
+
+```yaml
+device_tracker:
+  - platform: mqtt
+    devices:
+      tile_device_1: "bouncer/presence/device_1"
+   	  tile_device_2: "bouncer/presence/device_2"
+      tile_device_3: "bouncer/presence/device_3"
+      tile_device_4: "bouncer/presence/device_4"
+    qos: 0
+    payload_home: "home"
+    payload_not_home: "not_home"
+```
+This assumes the default `PUBLISH_BASE_TOPIC`. Consult the Bouncer configuration for more details.
+
+Now all you have to do is associate these device trackers with specific persons on your system. For example, via the configuration yaml file:
+
+```yaml
+person:
+  - name: Person1
+    device_trackers:
+      - device_tracker.device_1
+  - name: Person2
+    device_trackers:
+      - device_tracker.device_2
+  - name: Person3
+    device_trackers:
+      - device_tracker.device_3
+  - name: Person4
+    device_trackers:
+      - device_tracker.device_4
+```
+
+Now Home Assistant will set the presence status of each person whenever an MQTT message is received.
+
+This is enough to track the presence of the devices but if, for example, you need to restart Home Assistant, once it's back up again, it will not know what the current status of the person is and, by default, it will set them to `away`. Since Bouncer will not publish anything if the status does not change, we need to publish a message from Home Assistant to request the current status of all devices. This can be done via the subscribe topic mentioned above. We could, for example, create an automation that sends a message to this topic once Home Assistant is up and running:
+
+```yaml
+- id: on_start_request_persons_presence
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - service: mqtt.publish
+      data:
+        topic: bouncer/request/presence
+```
+This assumes the default `SUBSCRIBE_BASE_TOPIC`. Consult the Bouncer configuration for more details.
+
+## Bouncer Configuration
 
 The configuration for Bouncer can be done via command line flags, environment variables or a configuration file. All file types supported by the [viper project](https://github.com/spf13/viper) are supported. E.g. `JSON`, `TOML`, `YAML`, `HCL`, `INI`.
 
