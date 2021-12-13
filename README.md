@@ -82,7 +82,8 @@ All flags are also available via the following envs:
 | `BOUNCER_MQTT_BROKER`     | ""                 | The network address for the MQTT Broker. The port should be separated by a colon (`:`).          |
 | `BOUNCER_MQTT_USER`       | ""                 | The MQTT user to authenticate with the broker.          |
 | `BOUNCER_MQTT_PASSWORD`   | ""                 | The user's password for authentication.          |
-| `BOUNCER_MQTT_BASE_TOPIC` | bouncer/presence | The base topic when publishing the presence of a device. The device name will be appended to this topic. E.g. If a device is named `tile_solidus`, the topic will be `bouncer/presence/tile_solidus` :)          |
+| `BOUNCER_MQTT_PUBLISH_BASE_TOPIC` | bouncer/presence | The base topic when publishing the presence of a device. The device name will be appended to this topic. E.g. If a device is named `tile_solidus`, the topic will be `bouncer/presence/tile_solidus` :)          |
+| `BOUNCER_MQTT_SUBSCRIBE_BASE_TOPIC` | bouncer/request | The base topic bouncer will subscribe to. This will be used for any requests the bouncer will listen to. For now only the status request (sending the status of all devices) is available. |
 | `BOUNCER_DEVICE_EXPIRATION` | 60 seconds | The amount of time (in seconds) without detecting a device for it to be considered away          |
 
 ### MAC Address List
