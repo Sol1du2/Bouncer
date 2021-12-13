@@ -19,6 +19,8 @@ import (
 const (
 	home = "home"
 	away = "not_home"
+
+	presenceTopic = "presence"
 )
 
 type device struct {
@@ -141,6 +143,8 @@ func (l *Listener) Listen(ctx context.Context) error {
 	if stopErr := l.btAdapter.StopScan(); stopErr != nil {
 		logger.Debugln(stopErr)
 	}
+	l.mqttConn.Disconnect()
+
 	// Cancel our own context and stop context sensitive services.
 	listenCtxCancel()
 
@@ -201,6 +205,16 @@ func (l *Listener) setup() error {
 		return fmt.Errorf("failed to enable BLE stack: %s", err)
 	}
 
+	// Connect to MQTT server
+	if err := l.mqttConn.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to MQTT server: %s", err)
+	}
+
+	// Add new subscriptions here, as needed.
+	if err := l.mqttConn.Subscribe(presenceTopic, l.handleStatusRequest); err != nil {
+		return fmt.Errorf("failed to subscribe to %s topic: %s", presenceTopic, err)
+	}
+
 	// Notify ready.
 	if l.config.OnReady != nil {
 		l.config.OnReady(l)
@@ -236,7 +250,7 @@ func (l *Listener) scanBeacons() error {
 			// again.
 			if !d.isHome {
 				logger.Debugln(d.name, "has arrived")
-				if err := l.connectAndPublish(d.name, home); err != nil {
+				if err := l.mqttConn.PublishMessage(d.name, home); err != nil {
 					logger.WithError(err).Errorln("failed to send", home, "message")
 				} else {
 					d.isHome = true
@@ -282,7 +296,7 @@ func (l *Listener) checkBeaconPresence(ctx context.Context) {
 			l.dMutex.Lock()
 
 			logger.Debugln(d.name, "left")
-			if err := l.connectAndPublish(d.name, away); err != nil {
+			if err := l.mqttConn.PublishMessage(d.name, away); err != nil {
 				logger.WithError(err).Errorln("failed to send", home, "message")
 			} else {
 				d.isHome = false
@@ -302,14 +316,4 @@ func (l *Listener) checkBeaconPresence(ctx context.Context) {
 		case <-time.After(5 * time.Second):
 		}
 	}
-}
-
-// connectAndPublish connects to the MQTT broker, publishes a message and
-// disconnects.
-func (l *Listener) connectAndPublish(deviceName, message string) error {
-	if err := l.mqttConn.Connect(); err != nil {
-		return err
-	}
-	defer l.mqttConn.Disconnect()
-	return l.mqttConn.PublishMessage(deviceName, message)
 }
